@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>高级凯撒加密 - 浮动提醒版</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            height: 100vh; overflow: hidden; display: flex;
+            justify-content: center; align-items: center;
+            background-color: #0f172a;
+        }
+
+        #particle-canvas { position: fixed; top: 0; left: 0; z-index: -1; }
+
+        /* 容器 */
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1.5rem; border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            width: 90%; max-width: 600px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        h2 { text-align: center; color: #1e293b; margin-bottom: 1rem; font-size: 1.4rem; letter-spacing: 1px; }
+        label { font-size: 0.8rem; color: #64748b; font-weight: 600; display: block; margin: 12px 0 6px; }
+        
+        textarea {
+            width: 100%; height: 150px; padding: 12px;
+            border: 1px solid #e2e8f0; border-radius: 10px; resize: none;
+            font-family: 'Consolas', monospace; font-size: 13px; background: #fff;
+            transition: all 0.3s;
+        }
+        textarea:focus { border-color: #6366f1; outline: none; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
+
+        /* 控制区 */
+        .controls { 
+            display: flex; align-items: center; justify-content: space-between; 
+            background: #f8fafc; padding: 12px; border-radius: 12px; margin: 15px 0;
+        }
+        
+        .shift-group { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; color: #475569; }
+        input[type="number"] { width: 65px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; text-align: center; }
+        
+        .btn-group { display: flex; gap: 8px; }
+        button { padding: 8px 18px; cursor: pointer; border: none; border-radius: 8px; font-weight: 600; transition: all 0.2s; font-size: 0.9rem; }
+        
+        .btn-enc { background: #3b82f6; color: white; }
+        .btn-dec { background: #10b981; color: white; }
+        .btn-clear { background: #94a3b8; color: white; }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+        
+        .result-box { position: relative; margin-top: 10px; }
+        .copy-tag { 
+            position: absolute; right: 10px; top: 35px; 
+            background: #6366f1; color: white; padding: 4px 8px; 
+            border-radius: 6px; font-size: 11px; cursor: pointer; opacity: 0.8;
+        }
+        .copy-tag:hover { opacity: 1; }
+
+        /* 浮动提醒样式 (Toast) */
+        #toast-container {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 9999;
+        }
+        .toast {
+            background: rgba(30, 41, 59, 0.9); color: white;
+            padding: 12px 24px; border-radius: 50px; margin-bottom: 10px;
+            font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            animation: slideIn 0.3s ease-out, fadeOut 0.3s ease-in 2.2s forwards;
+            display: flex; align-items: center; gap: 8px;
+        }
+        @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeOut { to { opacity: 0; transform: translateY(-10px); } }
+    </style>
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+<div id="toast-container"></div>
+
+<div class="container">
+    <h2>高级复合加密系统</h2>
+    
+    <label>输入原始文本 / 待解密密文</label>
+    <textarea id="inputText" placeholder="输入内容...支持中文和符号"></textarea>
+
+    <div class="controls">
+        <div class="shift-group">
+            <span>位移量:</span>
+            <input type="number" id="shift" value="3">
+        </div>
+        <div class="btn-group">
+            <button class="btn-enc" onclick="handleEncrypt()">加密</button>
+            <button class="btn-dec" onclick="handleDecrypt()">解密</button>
+            <button class="btn-clear" onclick="clearAll()">清空</button>
+        </div>
+    </div>
+
+    <div class="result-box">
+        <label>加密结果 (Base64 + 凯撒):</label>
+        <span class="copy-tag" onclick="copyText('outEnc')">复制</span>
+        <textarea id="outEnc" readonly style="border-color: #3b82f6; height: 110px;"></textarea>
+    </div>
+
+    <div class="result-box">
+        <label>仅凯撒解密 (还原至 Base64):</label>
+        <span class="copy-tag" onclick="copyText('outDecRaw')">复制</span>
+        <textarea id="outDecRaw" readonly style="height: 110px;"></textarea>
+    </div>
+
+    <div class="result-box">
+        <label>深度还原 (Base64 -> 原文):</label>
+        <span class="copy-tag" onclick="copyText('outDecFinal')">复制</span>
+        <textarea id="outDecFinal" readonly style="height: 110px; border-color: #10b981;"></textarea>
+    </div>
+</div>
+
+<script>
+    /* --- 1. 浮动提醒引擎 --- */
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        
+        let icon = "🔔";
+        if(message.includes("成功") || message.includes("复制")) icon = "✅";
+        if(message.includes("失败") || message.includes("错误")) icon = "❌";
+        
+        toast.innerHTML = `<span>${icon}</span> ${message}`;
+        container.appendChild(toast);
+        
+        setTimeout(() => { toast.remove(); }, 2500);
+    }
+
+    /* --- 2. 核心逻辑 --- */
+    function caesar(str, shift) {
+        shift = (shift % 26 + 26) % 26;
+        return str.split('').map(char => {
+            let code = char.charCodeAt(0);
+            if (code >= 65 && code <= 90) return String.fromCharCode(((code - 65 + shift) % 26) + 65);
+            if (code >= 97 && code <= 122) return String.fromCharCode(((code - 97 + shift) % 26) + 97);
+            return char;
+        }).join('');
+    }
+
+    function handleEncrypt() {
+        const input = document.getElementById('inputText').value;
+        if (!input) { showToast("请输入内容再加密"); return; }
+        try {
+            const b64 = btoa(unescape(encodeURIComponent(input)));
+            const result = caesar(b64, parseInt(document.getElementById('shift').value));
+            document.getElementById('outEnc').value = result;
+            showToast("加密转换成功！");
+        } catch(e) { showToast("加密失败：包含非法字符", "error"); }
+    }
+
+    function handleDecrypt() {
+        const input = document.getElementById('inputText').value;
+        const shift = parseInt(document.getElementById('shift').value);
+        if (!input) { showToast("请输入内容再解密"); return; }
+
+        const caesarRestored = caesar(input, -shift);
+        document.getElementById('outDecRaw').value = caesarRestored;
+
+        try {
+            const final = decodeURIComponent(escape(atob(caesarRestored)));
+            document.getElementById('outDecFinal').value = final;
+            showToast("解密成功！");
+        } catch(e) {
+            document.getElementById('outDecFinal').value = "[解码失败：Base64 格式无效]";
+            showToast("深度解密失败：密文非 Base64 格式", "error");
+        }
+    }
+
+    function clearAll() {
+        ['inputText', 'outEnc', 'outDecRaw', 'outDecFinal'].forEach(id => document.getElementById(id).value = '');
+        showToast("已清空所有内容");
+    }
+
+    function copyText(id) {
+        const el = document.getElementById(id);
+        if(!el.value) { showToast("内容为空，无法复制", "error"); return; }
+        navigator.clipboard.writeText(el.value).then(() => {
+            showToast("已成功复制到剪贴板！");
+        });
+    }
+
+    /* --- 3. 背景粒子 --- */
+    const canvas = document.getElementById('particle-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.addEventListener('resize', resize); resize();
+    class P {
+        constructor() { this.init(); }
+        init() { this.x = Math.random()*canvas.width; this.y = Math.random()*canvas.height; this.v = 0.3+Math.random()*0.5; }
+        run() { this.y -= this.v; if(this.y<0) this.init(); ctx.fillStyle="rgba(255,255,255,0.2)"; ctx.beginPath(); ctx.arc(this.x,this.y,1,0,6.28); ctx.fill(); }
+    }
+    for(let i=0;i<80;i++) particles.push(new P());
+    function draw() { ctx.clearRect(0,0,canvas.width,canvas.height); particles.forEach(p=>p.run()); requestAnimationFrame(draw); }
+    draw();
+</script>
+
+</body>
+</html>
