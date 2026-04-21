@@ -1,0 +1,483 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><script src="/.nekoweb-api/static/site.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文本替换工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4F46E5',
+                        secondary: '#10B981',
+                        neutral: '#1F2937',
+                        warning: '#F59E0B',
+                        success: '#10B981',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .textarea-focus {
+                @apply focus:ring-2 focus:ring-primary/50 focus:border-primary;
+            }
+            .btn-hover {
+                @apply hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200;
+            }
+            .result-item {
+                @apply mb-3 p-3 border border-gray-200 rounded-lg bg-gray-50 transition-all duration-200;
+            }
+            .result-item:hover {
+                @apply border-primary/50 bg-gray-100;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-neutral">
+    <div class="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <header class="mb-12 text-center">
+            <h1 class="text-[clamp(2rem,5vw,3.5rem)] font-bold text-primary mb-4">文本替换工具</h1>
+            <p class="text-gray-600 max-w-2xl mx-auto text-lg">在待处理文本中查找并替换多个目标文本，支持多行替换规则</p>
+        </header>
+
+        <main class="bg-white rounded-xl shadow-xl p-6 md:p-8 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+                <!-- 左侧输入区域 -->
+                <div class="space-y-6">
+                    <!-- 待处理文本 -->
+                    <div class="space-y-2">
+                        <label for="inputText" class="block text-sm font-medium text-gray-700">待处理文本</label>
+                        <div class="relative">
+                            <textarea id="inputText" rows="8" class="w-full px-4 py-3 rounded-lg border border-gray-300 textarea-focus resize-none transition-all duration-200" placeholder="请输入需要处理的文本..."></textarea>
+                            <div class="absolute right-3 bottom-3 text-xs text-gray-500" id="inputTextCount">0 字符</div>
+                        </div>
+                    </div>
+
+                    <!-- 要被替换的文本 -->
+                    <div class="space-y-2">
+                        <label for="targetText" class="block text-sm font-medium text-gray-700">要被替换的文本 <span class="text-gray-500 text-xs">(每行一个)</span></label>
+                        <div class="relative">
+                            <textarea id="targetText" rows="5" class="w-full px-4 py-3 rounded-lg border border-gray-300 textarea-focus resize-none transition-all duration-200" placeholder="请输入要被替换的文本，每行一个..."></textarea>
+                            <div class="absolute right-3 bottom-3 text-xs text-gray-500" id="targetTextCount">0 行</div>
+                        </div>
+                    </div>
+
+                    <!-- 替换为的文本 -->
+                    <div class="space-y-2">
+                        <label for="replaceText" class="block text-sm font-medium text-gray-700">替换为的文本 <span class="text-gray-500 text-xs">(每行对应一个替换内容)</span></label>
+                        <div class="relative">
+                            <textarea id="replaceText" rows="5" class="w-full px-4 py-3 rounded-lg border border-gray-300 textarea-focus resize-none transition-all duration-200" placeholder="请输入替换文本，每行对应一个要被替换的文本..."></textarea>
+                            <div class="absolute right-3 bottom-3 text-xs text-gray-500" id="replaceTextCount">0 行</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧结果区域 -->
+                <div class="space-y-6">
+                    <!-- 处理结果 -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">处理结果</label>
+                        <div id="resultContainer" class="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                            <div class="p-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 text-center">
+                                <p>替换结果将显示在这里</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="flex flex-wrap gap-3">
+                        <button id="processBtn" class="flex items-center justify-center px-6 py-3 bg-primary text-white rounded-lg font-medium btn-hover">
+                            <i class="fa fa-exchange mr-2"></i> 执行替换
+                        </button>
+                        <button id="clearAllBtn" class="flex items-center justify-center px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium btn-hover">
+                            <i class="fa fa-trash mr-2"></i> 清空所有
+                        </button>
+                        <button id="copyAllBtn" class="flex items-center justify-center px-6 py-3 bg-secondary text-white rounded-lg font-medium btn-hover">
+                            <i class="fa fa-copy mr-2"></i> 复制所有结果
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 替换统计 -->
+            <div class="mt-8 p-4 bg-gray-50 rounded-lg">
+                <h3 class="text-sm font-medium text-gray-700 mb-2">替换统计</h3>
+                <div id="replacementStats" class="text-sm text-gray-600">
+                    <p>尚未执行替换操作</p>
+                </div>
+            </div>
+
+            <!-- 替换选项 -->
+            <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                <h3 class="text-sm font-medium text-gray-700 mb-3">替换选项</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="caseSensitive" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                        <label for="caseSensitive" class="ml-2 text-sm text-gray-700">区分大小写</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="regexMode" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                        <label for="regexMode" class="ml-2 text-sm text-gray-700">正则表达式模式</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input type="radio" id="singleResultMode" name="resultMode" class="w-4 h-4 text-primary border-gray-300 focus:ring-primary" checked>
+                        <label for="singleResultMode" class="ml-2 text-sm text-gray-700">合并结果（所有替换应用于同一文本）</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input type="radio" id="multipleResultMode" name="resultMode" class="w-4 h-4 text-primary border-gray-300 focus:ring-primary">
+                        <label for="multipleResultMode" class="ml-2 text-sm text-gray-700">分离结果（每个替换生成一个新文本）</label>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="text-center text-gray-500 text-sm">
+            <p>© 2025 文本替换工具 | 高效处理您的文本替换需求</p>
+        </footer>
+    </div>
+
+    <script>
+        // 获取DOM元素
+        const inputText = document.getElementById('inputText');
+        const targetText = document.getElementById('targetText');
+        const replaceText = document.getElementById('replaceText');
+        const resultContainer = document.getElementById('resultContainer');
+        const processBtn = document.getElementById('processBtn');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const copyAllBtn = document.getElementById('copyAllBtn');
+        const inputTextCount = document.getElementById('inputTextCount');
+        const targetTextCount = document.getElementById('targetTextCount');
+        const replaceTextCount = document.getElementById('replaceTextCount');
+        const replacementStats = document.getElementById('replacementStats');
+        const caseSensitive = document.getElementById('caseSensitive');
+        const regexMode = document.getElementById('regexMode');
+        const singleResultMode = document.getElementById('singleResultMode');
+        const multipleResultMode = document.getElementById('multipleResultMode');
+
+        // 更新字符/行数计数
+        function updateCounters() {
+            inputTextCount.textContent = `${inputText.value.length} 字符`;
+            targetTextCount.textContent = `${targetText.value.split('\n').filter(line => line.trim() !== '').length} 行`;
+            replaceTextCount.textContent = `${replaceText.value.split('\n').filter(line => line.trim() !== '').length} 行`;
+        }
+
+        // 执行替换
+        function processReplacement() {
+            const input = inputText.value;
+            let targets = targetText.value.split('\n').filter(line => line.trim() !== '');
+            let replacements = replaceText.value.split('\n').filter(line => line.trim() !== '');
+            
+            // 验证输入
+            if (!input) {
+                alert('请输入待处理文本');
+                return;
+            }
+            
+            if (targets.length === 0) {
+                alert('请输入要被替换的文本');
+                return;
+            }
+            
+            // 获取替换选项
+            const isCaseSensitive = caseSensitive.checked;
+            const isRegexMode = regexMode.checked;
+            const isSingleResultMode = singleResultMode.checked;
+            
+            // 清空结果容器
+            resultContainer.innerHTML = '';
+            
+            let stats = [];
+            let totalReplacements = 0;
+            let warnings = [];
+            
+            if (isSingleResultMode) {
+                // 合并结果模式
+                // 处理行数不匹配的情况
+                if (targets.length !== replacements.length) {
+                    const maxLength = Math.max(targets.length, replacements.length);
+                    
+                    // 扩展数组到相同长度
+                    targets = [...targets, ...Array(maxLength - targets.length).fill('')];
+                    replacements = [...replacements, ...Array(maxLength - replacements.length).fill('')];
+                    
+                    warnings.push(`警告: 要被替换的文本行数与替换为的文本行数不匹配，已自动填充`);
+                }
+                
+                let result = input;
+                
+                // 执行替换并记录统计信息
+                for (let i = 0; i < targets.length; i++) {
+                    const target = targets[i];
+                    const replacement = replacements[i];
+                    
+                    if (!target) continue;
+                    
+                    let regex;
+                    let occurrences = 0;
+                    
+                    try {
+                        // 根据选项创建正则表达式
+                        if (isRegexMode) {
+                            // 正则表达式模式
+                            regex = new RegExp(target, isCaseSensitive ? 'g' : 'gi');
+                        } else {
+                            // 普通文本模式，转义特殊字符
+                            const escapedTarget = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            regex = new RegExp(escapedTarget, isCaseSensitive ? 'g' : 'gi');
+                        }
+                        
+                        occurrences = (result.match(regex) || []).length;
+                        
+                        if (occurrences > 0) {
+                            result = result.replace(regex, replacement);
+                            stats.push(`"${target}" → "${replacement}": ${occurrences} 处替换`);
+                            totalReplacements += occurrences;
+                        }
+                    } catch (e) {
+                        warnings.push(`警告: 正则表达式 "${target}" 格式错误 - ${e.message}`);
+                    }
+                }
+                
+                // 添加结果
+                addResultItem(result, '合并替换结果', 0);
+            } else {
+                // 分离结果模式
+                // 每个替换文本生成一个结果
+                if (replacements.length === 0) {
+                    alert('请输入替换为的文本');
+                    return;
+                }
+                
+                // 为每个替换文本生成结果
+                for (let i = 0; i < replacements.length; i++) {
+                    const replacement = replacements[i];
+                    let result = input;
+                    let currentStats = [];
+                    let currentReplacements = 0;
+                    
+                    // 对每个目标文本执行替换
+                    for (let j = 0; j < targets.length; j++) {
+                        const target = targets[j];
+                        
+                        if (!target) continue;
+                        
+                        let regex;
+                        let occurrences = 0;
+                        
+                        try {
+                            // 根据选项创建正则表达式
+                            if (isRegexMode) {
+                                // 正则表达式模式
+                                regex = new RegExp(target, isCaseSensitive ? 'g' : 'gi');
+                            } else {
+                                // 普通文本模式，转义特殊字符
+                                const escapedTarget = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                regex = new RegExp(escapedTarget, isCaseSensitive ? 'g' : 'gi');
+                            }
+                            
+                            // 计算匹配次数
+                            occurrences = (result.match(regex) || []).length;
+                            
+                            if (occurrences > 0) {
+                                // 对所有匹配使用当前替换文本
+                                result = result.replace(regex, replacement);
+                                currentStats.push(`"${target}" → "${replacement}": ${occurrences} 处替换`);
+                                currentReplacements += occurrences;
+                            }
+                        } catch (e) {
+                            warnings.push(`警告: 正则表达式 "${target}" 格式错误 - ${e.message}`);
+                        }
+                    }
+                    
+                    // 添加结果
+                    addResultItem(result, `替换 #${i+1}: "${replacement}"`, i);
+                    
+                    // 更新总统计
+                    stats = [...stats, ...currentStats];
+                    totalReplacements += currentReplacements;
+                }
+            }
+            
+            // 更新统计信息
+            updateStats(stats, totalReplacements, warnings);
+            
+            // 添加动画效果
+            const resultItems = document.querySelectorAll('.result-item');
+            resultItems.forEach((item, index) => {
+                setTimeout(() => {
+                    item.classList.add('opacity-100');
+                    item.classList.remove('opacity-0');
+                }, index * 100);
+            });
+        }
+
+        // 添加结果项
+        function addResultItem(content, title, index) {
+            const resultItem = document.createElement('div');
+            resultItem.className = 'result-item opacity-0 transition-opacity duration-300';
+            resultItem.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <h4 class="font-medium text-gray-800">${title}</h4>
+                    <button class="copy-result-btn text-gray-500 hover:text-primary transition-colors" data-index="${index}">
+                        <i class="fa fa-copy"></i>
+                    </button>
+                </div>
+                <div class="text-gray-700 whitespace-pre-wrap break-words">${escapeHTML(content)}</div>
+            `;
+            
+            resultContainer.appendChild(resultItem);
+            
+            // 添加复制按钮事件
+            const copyBtn = resultItem.querySelector('.copy-result-btn');
+            copyBtn.addEventListener('click', function() {
+                copyToClipboard(content, `结果 #${parseInt(this.dataset.index) + 1}`);
+            });
+            
+            // 触发重排后添加动画类
+            setTimeout(() => {
+                resultItem.classList.remove('opacity-0');
+            }, 10);
+        }
+
+        // 更新统计信息
+        function updateStats(stats, totalReplacements, warnings) {
+            // 构建统计信息HTML
+            let statsHtml = '';
+            
+            if (totalReplacements === 0) {
+                statsHtml = '<p>没有找到匹配的文本进行替换</p>';
+            } else {
+                statsHtml = `
+                    <p>总共替换了 ${totalReplacements} 处</p>
+                    <ul class="list-disc pl-5 mt-2 space-y-1">
+                        ${stats.map(stat => `<li>${stat}</li>`).join('')}
+                    </ul>
+                `;
+            }
+            
+            // 添加警告信息
+            if (warnings.length > 0) {
+                statsHtml += `
+                    <div class="mt-3 p-2 bg-warning/10 border border-warning/30 rounded text-warning text-xs">
+                        <p class="font-medium">处理过程中出现 ${warnings.length} 个警告:</p>
+                        <ul class="list-disc pl-5 mt-1 space-y-1">
+                            ${warnings.map(warning => `<li>${warning}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            replacementStats.innerHTML = statsHtml;
+        }
+
+        // 清空所有输入和结果
+        function clearAll() {
+            inputText.value = '';
+            targetText.value = '';
+            replaceText.value = '';
+            resultContainer.innerHTML = `
+                <div class="p-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 text-center">
+                    <p>替换结果将显示在这里</p>
+                </div>
+            `;
+            replacementStats.innerHTML = '<p>尚未执行替换操作</p>';
+            updateCounters();
+        }
+
+        // 复制所有结果
+        function copyAllResults() {
+            const results = [];
+            const resultItems = document.querySelectorAll('.result-item .whitespace-pre-wrap');
+            
+            if (resultItems.length === 0) {
+                alert('没有结果可复制');
+                return;
+            }
+            
+            resultItems.forEach((item, index) => {
+                results.push(`结果 #${index + 1}:\n${item.textContent}`);
+            });
+            
+            copyToClipboard(results.join('\n\n'), '所有结果');
+        }
+
+        // 复制到剪贴板
+        function copyToClipboard(text, message) {
+            navigator.clipboard.writeText(text).then(() => {
+                showNotification(`已复制 ${message} 到剪贴板`);
+            }).catch(err => {
+                showNotification('复制失败，请手动复制', true);
+            });
+        }
+
+        // 显示通知
+        function showNotification(message, isError = false) {
+            // 创建通知元素
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg z-50 transition-all duration-300 transform translate-x-full ${isError ? 'bg-red-500 text-white' : 'bg-success text-white'}`;
+            notification.textContent = message;
+            
+            // 添加到页面
+            document.body.appendChild(notification);
+            
+            // 触发动画
+            setTimeout(() => {
+                notification.classList.remove('translate-x-full');
+            }, 10);
+            
+            // 3秒后隐藏
+            setTimeout(() => {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
+        }
+
+        // HTML转义
+        function escapeHTML(str) {
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // 添加事件监听器
+        processBtn.addEventListener('click', processReplacement);
+        clearAllBtn.addEventListener('click', clearAll);
+        copyAllBtn.addEventListener('click', copyAllResults);
+        
+        // 为输入框添加事件监听器，实时更新计数
+        inputText.addEventListener('input', updateCounters);
+        targetText.addEventListener('input', updateCounters);
+        replaceText.addEventListener('input', updateCounters);
+
+        // 初始化计数
+        updateCounters();
+
+        // 添加键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            // Ctrl/Cmd + Enter 执行替换
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                processReplacement();
+            }
+        });
+    </script>
+</body>
+</html>
+    
